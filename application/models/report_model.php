@@ -57,9 +57,25 @@ class Report_model extends CI_Model {
 
 	}
 
+	public function get_Intereses($id_interes)
+	{
+		$procedure = "call sp_get_status_interes(?)";
+		$query = $this->db->query($procedure, $id_interes);
+		mysqli_next_result($this->db->conn_id);
+		$data = $query->result();
+		$query->free_result();
+		return $data;
+	}
 
-	
-
+	public function get_Temperamentos($id_interes)
+	{
+		$procedure = "call sp_get_status_temperamentos(?)";
+		$query = $this->db->query($procedure, $id_interes);
+		mysqli_next_result($this->db->conn_id);
+		$data = $query->result();
+		$query->free_result();
+		return $data;
+	}
   }
 
 

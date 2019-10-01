@@ -16,8 +16,13 @@
     <!--[if lt IE 9]>
       <script src="<?php echo base_url();?>/assets/js/html5shiv.js"></script>
       <script src="<?php echo base_url();?>/assets/js/respond.min.js"></script>
+
     <![endif]-->
-    <script src="<?php echo base_url();?>/assets/js/jquery.js"></script>
+    <script src="<?php echo base_url();?>/assets/js/jquery3.min.js"></script>
+    <script src="<?php echo base_url();?>/assets/js/jszip.min.js"></script>
+    <script src="<?php echo base_url();?>/assets/js/jszip-utils.min.js"></script>
+    <script src="<?php echo base_url();?>/assets/js/filesaver.js"></script>
+    <script src="<?php echo base_url();?>/assets/js/download.js"></script>
     <?php if (isset($head_content)) echo $head_content; ?>
 
 	<style type="text/css">
@@ -83,6 +88,50 @@
         font-size: 13px;
         margin-bottom: -15px;
     }
+
+    #loading {
+        background: url('<?php echo base_url();?>assets/images/ajax-loader.gif') no-repeat center center;
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: 100%;
+        z-index: 9999999;
+        display: none;
+    }
+
+    .alert {
+        padding: 10px;
+        background-color: #a95151;
+        color: white;
+        margin-bottom: 10px;
+        font-size: 16px;
+        text-align: center;
+    }
+
+    .closebtn {
+        margin-left: 15px;
+        color: white;
+        font-weight: bold;
+        float: right;
+        font-size: 22px;
+        line-height: 20px;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+
+    /* When moving the mouse over the close button */
+    .closebtn:hover {
+        color: black;
+    }
+
+    .bGreen{
+        background-color: green;
+    }
+
+    .bBlue{
+        background-color: blue;
+    }
 	</style>
 </head>
 <body>
@@ -117,8 +166,15 @@
         <div class="whead clearfix">
             <h6>LINKS DE ENCUESTAS</h6>
         </div>
+
+        <div id="loading"></div>
           
         <div class="formCrudCreate">
+
+            <div class="alert hide">
+                <span class="closebtn" onclick="this.parentElement.style.display='none';">&times;</span>
+                ¡Esto puede tardar varios minutos!
+            </div>
             
             <form class="crudBenchmarking main" method="post" action="welcome" novalidate="novalidate">
             
@@ -179,7 +235,9 @@
                 <div class="reportDashboardButton menuCrud clearfix">
                     <ul class="record_actions">
 
-                        <li><button class="sideB bRed mt10 spanButton" type="submit" name="generate_report" value="zip">Exportar Consolidado Zip</button></li>
+                        <li><button class="sideB bGreen mt10 spanButton" type="submit" name="generate_report" value="zip">Excel Status</button></li>
+
+                        <li><button class="sideB bBlue mt10 spanButton" onclick="getZip()" type="button" name="generate_report">Exportar Pdfs</button></li>
                         
                         <li><button class="autoselectOptionData2 sideB bGreyish mt10" value="report" name="generate_report" type="submit">Generar Reporte</button></li>
                         <!--li><a class="sideB bRed mt10 spanButton" href="<?php echo site_url('welcome/excel') ?>">Exportar a Excel</a></li-->
@@ -195,7 +253,10 @@
                 <!-- /.menuCrud -->
                 
             </form>
-        
+            <div class="progress hide" id="progress_bar">
+                <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;">
+                </div>
+            </div>
         </div>
         <!-- /.formCrudCreate -->
 
@@ -245,25 +306,155 @@
 </div>
 
 <script type="text/javascript">
-$(function() {
+    var Promise = window.Promise;
+    if (!Promise) {
+        Promise = JSZip.external.Promise;
+    }
+    $(function() {
+        var a = document.getElementById("descarga");
+        function cutAndPaste(from, to) {
+            $(to).append(function() {
+                return $(from + " option:selected").each(function() {
+                    this.outerHTML;
+                }).remove();
+            });
+        }
+
+        $("#forward").off("click").on("click", function() {
+            cutAndPaste("#evaluados", "#seleccionados");
+        });
+
+        $("#backward").off("click").on("click", function() {
+            cutAndPaste("#seleccionados", "#evaluados");
+        });
+    });
     
-    function cutAndPaste(from, to) {
-        $(to).append(function() {
-            return $(from + " option:selected").each(function() {
-                this.outerHTML;
-            }).remove();
+    function getZip() {
+        var poll = $('#pollintereses').val();
+        poll = poll.split('-');
+        poll = poll[0].trim();
+        $('#loading').show();
+        $('.alert').show();
+        $.ajax({
+            url: '<?php echo base_url();?>index.php/welcome/getLinksConsolidadoJson/'+poll,
+            type: "GET",
+            dataType: "json",
+            success: function (d) {
+                generateZIP(d);
+            },
+            error: function (error) {
+                console.log(`Error ${error}`);
+            }
         });
     }
-    
-    $("#forward").off("click").on("click", function() {
-        cutAndPaste("#evaluados", "#seleccionados");
-    });
-    
-    $("#backward").off("click").on("click", function() {
-        cutAndPaste("#seleccionados", "#evaluados");
-    });
-    
-});
+
+    function generateZIP(links) {
+        var zip = new JSZip();
+        var count = 0;
+        var zipFilename = "rep.zip";
+
+        load(links);
+        /*links.forEach((url, i) => {
+            JSZipUtils.getBinaryContent(url.consolidado, function (err, data) {
+                if (err) {
+                    console.log(err);
+                }
+                zip.file(url.name+'.pdf', data, { binary: true });
+                count++;
+                if (count == links.length) {
+                    zip.generateAsync({ type: 'blob' }).then(function (content) {
+                        $('#loading').hide();
+                        saveAs(content, zipFilename);
+                    });
+                }
+            });
+        });*/
+        /*links.forEach(function (url, i) {
+            $.ajax({
+                url: url.consolidado,
+                xhrFields:{
+                    responseType: 'blob'
+                },
+                success: (data) => {
+                    let blob = new Blob([data], {type: 'arraybuffer'});
+                    let link = document.createElement('a');
+                    let objectURL = window.URL.createObjectURL(blob);
+                    link.href = objectURL;
+                    link.target = '_self';
+                    link.download = url.name+'.pdf';
+                    (document.body || document.documentElement).appendChild(link);
+                    link.click();
+                }
+            });
+        });*/
+        /*var filename = links[0].name + '.pdf';
+        $.ajax({
+            url: links[0].consolidado,
+            xhrFields:{
+                responseType: 'blob'
+            },
+            success: (data) => {
+                let blob = new Blob([data], {type: 'arraybuffer'});
+                let link = document.createElement('a');
+                let objectURL = window.URL.createObjectURL(blob);
+                link.href = objectURL;
+                link.target = '_self';
+                link.download = "fileName.pdf";
+                (document.body || document.documentElement).appendChild(link);
+                link.click();
+            }
+        });*/
+        /* var req = new XMLHttpRequest();
+        req.open("GET", links[0].consolidado, true);
+        req.responseType = "blob";
+
+        req.onload = function (event) {
+            var blob = req.response;
+            console.log(blob.size);
+            var link=document.createElement('a');
+            link.href=window.URL.createObjectURL(blob);
+            link.download="Dossier_" + new Date() + ".pdf";
+            link.click();
+        };
+
+        req.send();*/
+    }
+
+    async function load(links) {
+        for (let index = 0; index < links.length; index++){
+            //window.open(links[index].consolidado,'_blank');
+            const file = await getNumFruit(links[index]);
+            //zip.file(links[index].name+'.pdf', file);
+        }
+    }
+
+    const sleep = ms => {
+        return new Promise(resolve => setTimeout(resolve, ms))
+    };
+
+    const getNumFruit = (url) => {  $('#loading').show();
+        return sleep(25000).then(v => { console.log('odlir', url);
+            $.ajax({
+                url: url.consolidado,
+                xhrFields:{
+                    responseType: 'blob'
+                },
+                success: (data) => {
+                    let blob = new Blob([data], {type: 'arraybuffer'});
+                    let link = document.createElement('a');
+                    let objectURL = window.URL.createObjectURL(blob);
+                    link.href = objectURL;
+                    link.target = '_self';
+                    link.download = url.name+'.pdf';
+                    (document.body || document.documentElement).appendChild(link);
+                    link.click();
+                    $('#loading').hide();
+                }
+            });
+        })
+    };
+
+
 </script>
 
 </body>
